@@ -228,14 +228,59 @@ require("./config/passport");
   ```
   * config/passport.js
   ```
+const passport = require("passport");
+const User = require("../models/user");
+const LocalStrategy = require("passport-local").Strategy;
+passport.serializeUser((user, done) => {
+    done(null, user.id);
+});
+passport.deserializeUser((id, done) => {
+    User.findById(id, (err, user) => {
+        done(err, user);
+    });
+});
+passport.use("local.signup", new LocalStrategy({
+    usernameField: "email",
+    passwordField: "password",
+    passReqToCallback: true
+},(req, email, password, done) => {
+    req.checkBody("email", "Invalid email").notEmpty().isEmail();
+    req.checkBody("password", "Invalid password").notEmpty().isLength({min:4});
+    const errors = req.validationErrors();
+    if(errors) {
+        const messages = [];
+        errors.forEach((error) => {
+            messages.push(error.msg);
+        });
+        return done(null, false, req.flash("error", messages));
+    }
+    User.findOne({"email": email}, (err, user)=> {
+        if(err) {
+            return done(err);
+        }
+        if(user) {
+            return done(null, false, {message: "Email is already in use."});
+        }
+        const newUser = new User();
+        newUser.email = email;
+        newUser.password = newUser.encryptPassword(password);
+        newUser.save((err, result)=>{
+            if(err) {
+                return done(err);
+            }
+            return done(null, newUser);
+        });
+    });
+}));
   ```
   * models/user.js
   ```
 const bcrypt = require("bcrypt-nodejs");
-userSchema.methods.encryptPassword = (password) => {
+//method를 정의할 때 arrow function을 쓰면 여기서 this가 global object를 가리키기 때문에 일반함수 사용
+userSchema.methods.encryptPassword = function(password) {
     return bcrypt.hashSync(password, bcrypt.genSaltSync(5), null);
 };
-userSchema.methods.validPassword = (password) => {
+userSchema.methods.validPassword = function(password) {
     return bcrypt.compareSync(password, this.password);
 };
   ```
@@ -275,8 +320,111 @@ router.get("/user/profile", (req, res, next) => {
         {{/if}}
   ```
 8. Validation
-  * express-validator 설치
-  * 
+  * express-validator 설치(2.20.5버전, 최근에는 사용법이 달라짐)
+  * app.js
+  ```
+const validator = require("express-validator");
+//app.use(express.urlencoded({ extended: false }));
+app.use(validator()); //body가 parse한 후에 실행되어야 함
+  ```
+  * routes/index.js에서 passport.authenticate()를 쓰기 때문에 passport.js에서 validation을 해야 함
+  * config/passport.js
+  ```
+  passport.use("local.signup", new LocalStrategy({
+    usernameField: "email",
+    passwordField: "password",
+    passReqToCallback: true
+},(req, email, password, done) => {
+    //추가된 부분
+    //email이 비어있지는 않은지, email형식인지 체크하고 에러가 나면 에러메시지 출력
+    req.checkBody("email", "Invalid email").notEmpty().isEmail();
+    //password이 비어있지는 않은지, 최소길이가 4인지 체크하고 에러가 나면 에러메시지 출력
+    req.checkBody("password", "Invalid password").notEmpty().isLength({min:4});
+    const errors = req.validationErrors();
+    if(errors) {
+        const messages = [];
+        errors.forEach((error) => {
+            messages.push(error.msg);
+        });
+        return done(null, false, req.flash("error", messages));
+    }
+    //
+    User.findOne({"email": email}, (err, user)=> {
+      ...
+    });
+}));
+    ```
+9. Sign in
+  * config/passport.js
+  ```
+passport.use("local.signin", new LocalStrategy({
+    usernameField: "email",
+    passwordField: "password",
+    passReqToCallback: true
+}, (req, email, password, done) => {
+    req.checkBody("email", "Invalid email").notEmpty().isEmail();
+    req.checkBody("password", "Invalid password").notEmpty();
+    const errors = req.validationErrors();
+    if(errors) {
+        const messages = [];
+        errors.forEach((error) => {
+            messages.push(error.msg);
+        });
+        return done(null, false, req.flash("error", messages));
+    }
+    User.findOne({"email": email}, (err, user)=> {
+        if(err) {
+            return done(err);
+        }
+        if(!user) {
+            return done(null, false, {message: "No user found."});
+        }
+        if(!user.validPassword(password)){
+            return done(null, false, {message: "Wrong password."})
+        }
+        return done(null, user);
+    });
+}));
+    ```
+  * routes/index.js
+  ```
+router.get("/user/signin", (req, res, next) => {
+  const messages = req.flash("error");
+  res.render("user/signin", {csrfToken: req.csrfToken(), messages: messages, hasErrors: messages.length > 0});
+});
+router.post("/user/signin", passport.authenticate("local.signin", {
+  successRedirect: "profile",
+  failureRedirect: "signin",
+  failureFlash: true
+}));
+    ```
+  * views/user/signin.hbs signup내용 복사
+  ```
+  <div class="row">
+    <div class="col-md-4 col-md-offset-4">
+        <h1>Sign In</h1>
+        {{#if hasErrors}}
+            <div class="alert alert-danger">
+                {{# each messages}}
+                    <p>{{this}}</p>
+                {{/each}}
+            </div>
+        {{/if}}
+        <form action="/user/signin" method="POST">
+            <div class="form-group">
+                <label for="email">E-Mail</label>
+                <input type="text" id="email" name="email" class="form-control">
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" class="form-control">
+            </div>
+            <input type="hidden" name="_csrf" value="{{csrfToken}}">
+            <button type="submit" class="btn btn-primary">Sign In</button>
+        </form>
+    </div>
+</div>
+  ```
 -------------------------------
 <http://www.naver.com>
 ![Alt text](https://camo.githubusercontent.com/202c9ae1d457d6109be6c4cf13db9cac5fd708a6/687474703a2f2f6366696c65362e75662e746973746f72792e636f6d2f696d6167652f32343236453634363534334339423435333243374230 "alt title")

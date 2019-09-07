@@ -14,7 +14,7 @@
     "express": "~4.16.1",
     "express-handlebars": "^3.1.0",
     "express-session": "^1.16.2",
-    "express-validator": "^6.2.0",
+    "express-validator": "^2.20.5",
     "hbs": "~4.0.4",
     "http-errors": "~1.6.3",
     "mongoose": "^5.6.11",
