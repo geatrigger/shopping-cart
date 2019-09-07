@@ -214,8 +214,69 @@ const session = require("express-session");
 app.use(session({secret: "mysupersecret", resave: false, saveUninitialized: false}));
   ```
 7. User Sign Up with Passport
-
-
+  * 설치할 것 : passport, passport-local(facebook, twitter 등 다양한 종류가 있음), connect-flash, bcrypt-nodejs
+  * app.js
+  ```
+const passport = require("passport");
+const flash = require("connect-flash");
+//
+app.use(flash());
+app.use(passport.initialize());
+app.use(passport.session());
+// 한 번만 실행
+require("./config/passport");
+  ```
+  * config/passport.js
+  ```
+  ```
+  * models/user.js
+  ```
+const bcrypt = require("bcrypt-nodejs");
+userSchema.methods.encryptPassword = (password) => {
+    return bcrypt.hashSync(password, bcrypt.genSaltSync(5), null);
+};
+userSchema.methods.validPassword = (password) => {
+    return bcrypt.compareSync(password, this.password);
+};
+  ```
+  * routes/index.js
+  ```
+const passport = require("passport");
+//기존의 router.get(/user/signup)의 두번째 인자 수정함
+router.get("/user/signup", (req, res, next) => {
+  const messages = req.flash("error");
+  res.render("user/signup", {csrfToken: req.csrfToken(), messages: messages, hasErrors: messages.length > 0});
+});
+//기존의 router.post(/user/signup)의 두번째 인자 교체함
+router.post("/user/signup", passport.authenticate("local.signup", {
+  //user폴더 기준
+  successRedirect: "profile",
+  failureRedirect: "signup",
+  failureFlash: true
+}));
+// /profile 라우팅
+router.get("/user/profile", (req, res, next) => {
+  res.render("user/profile")
+})
+  ```
+  * views/user/profile.hbs
+  ```
+  <h1>User Profile</h1>
+  ```
+  * views/user/signup.hbs
+  ```
+  <!-- form위에 validation error자리에 넣음 -->
+        {{#if hasErrors}}
+            <div class="alert alert-danger">
+                {{# each messages}}
+                    <p>{{this}}</p>
+                {{/each}}
+            </div>
+        {{/if}}
+  ```
+8. Validation
+  * express-validator 설치
+  * 
 -------------------------------
 <http://www.naver.com>
 ![Alt text](https://camo.githubusercontent.com/202c9ae1d457d6109be6c4cf13db9cac5fd708a6/687474703a2f2f6366696c65362e75662e746973746f72792e636f6d2f696d6167652f32343236453634363534334339423435333243374230 "alt title")

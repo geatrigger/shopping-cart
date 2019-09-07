@@ -2,6 +2,7 @@ var express = require('express');
 var router = express.Router();
 const Product = require("../models/product");
 const csrf = require("csurf");
+const passport = require("passport");
 
 const csrfProtection = csrf();
 router.use(csrfProtection);
@@ -25,11 +26,19 @@ router.get('/', function(req, res, next) {
 });
 
 router.get("/user/signup", (req, res, next) => {
-  res.render("user/signup", {csrfToken: req.csrfToken()});
+  const messages = req.flash("error");
+  res.render("user/signup", {csrfToken: req.csrfToken(), messages: messages, hasErrors: messages.length > 0});
 });
 
-router.post("/user/signup", (req, res, next) => {
-  res.redirect('/');
-});
+router.post("/user/signup", passport.authenticate("local.signup", {
+  //user폴더 기준
+  successRedirect: "profile",
+  failureRedirect: "signup",
+  failureFlash: true
+}));
+
+router.get("/user/profile", (req, res, next) => {
+  res.render("user/profile")
+})
 
 module.exports = router;
